@@ -87,11 +87,26 @@ export async function POST(req: Request) {
   let isRagWorking = false;
   let ragSources: RAGSource[] = [];
 
+  // Build the retrieval query from the most recent user turns rather than
+  // only the latest one, so short follow-ups ("how much does that cost?")
+  // still pull in context about the product being discussed.
+  const RAG_HISTORY_TURNS = 3;
+  const RAG_NUM_RESULTS = 6;
+  const retrievalQuery = messages
+    .filter((msg: any) => msg.role === "user")
+    .slice(-RAG_HISTORY_TURNS)
+    .map((msg: any) => msg.content)
+    .join("\n");
+
   // Attempt to retrieve context from RAG
   try {
-    console.log("🔍 Initiating RAG retrieval for query:", latestMessage);
+    console.log("🔍 Initiating RAG retrieval for query:", retrievalQuery);
     measureTime("RAG Start");
-    const result = await retrieveContext(latestMessage, knowledgeBaseId);
+    const result = await retrieveContext(
+      retrievalQuery,
+      knowledgeBaseId,
+      RAG_NUM_RESULTS,
+    );
     retrievedContext = result.context;
     isRagWorking = result.isRagWorking;
     ragSources = result.ragSources || [];
@@ -108,7 +123,7 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     console.error("💀 RAG Error:", error);
-    console.error("❌ RAG retrieval failed for query:", latestMessage);
+    console.error("❌ RAG retrieval failed for query:", retrievalQuery);
     retrievedContext = "";
     isRagWorking = false;
     ragSources = [];
